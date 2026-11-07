@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Owner Dashboard · WattSpot</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .main{height:auto;flex-direction:column;padding-bottom:48px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px}
+  .card{gap:6px;min-height:130px}
+  .card .v{font-size:30px;font-weight:700;line-height:1.15}
+  .card ul{list-style:none;padding:0;margin:4px 0 0;font-size:14px}
+  .card li{display:flex;justify-content:space-between;gap:12px}
+  .wrapx{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.25);white-space:nowrap}
+  th{font-weight:600;color:var(--mut)}
+  td.num,th.num{text-align:right}
+  .btn{border:0;cursor:pointer;font-family:inherit;padding:10px 18px}
+  .btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="nav">
+  <div class="logo">WattSpot</div>
+  <a href="checkout.html">Stations</a><a class="on">Owner dashboard</a>
+</div>
+
+<div class="main">
+  <div class="row sb">
+    <div class="h2">Owner dashboard</div>
+    <div class="row" style="gap:14px"><span class="m" id="updated"></span><button class="btn" id="refresh" type="button">Refresh</button></div>
+  </div>
+
+  <div class="cards" aria-live="polite">
+    <div class="g col card"><span class="m">Total orders</span><span class="v" id="m-orders">–</span></div>
+    <div class="g col card"><span class="m">Total revenue</span><span class="v" id="m-revenue">–</span></div>
+    <div class="g col card"><span class="m">Average order value</span><span class="v" id="m-aov">–</span></div>
+    <div class="g col card"><span class="m">Top-selling station</span><span class="v" id="m-top" style="font-size:20px">–</span><span class="m" id="m-top-sub"></span></div>
+    <div class="g col card"><span class="m">Low stock (under 5 open slots)</span><ul id="m-low"><li>–</li></ul></div>
+  </div>
+
+  <div class="g col" style="gap:12px">
+    <div class="h3">All bookings</div>
+    <div class="wrapx">
+      <table>
+        <thead><tr><th>Order</th><th>Customer</th><th>Email</th><th>Station</th><th class="num">kWh</th><th>Payment</th><th class="num">Total</th><th>Date</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="m">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const peso = n => '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  async function load() {
+    try {
+      const [m, orders] = await Promise.all([
+        fetch('/api/metrics').then(r => r.json()),
+        fetch('/api/orders').then(r => r.json())
+      ]);
+      $('m-orders').textContent = m.total_orders;
+      $('m-revenue').textContent = peso(m.total_revenue);
+      $('m-aov').textContent = peso(m.average_order_value);
+      const t = m.top_selling_station;
+      $('m-top').textContent = t ? t.name : 'No orders yet';
+      $('m-top-sub').textContent = t ? `${t.orders} booking${t.orders === 1 ? '' : 's'} · ${t.kwh} kWh` : '';
+      $('m-low').innerHTML = m.low_stock.length
+        ? m.low_stock.map(s => `<li><span>${esc(s.name)}</span><b>${s.available_slots} open</b></li>`).join('')
+        : '<li>All stations well stocked</li>';
+      $('rows').innerHTML = orders.length
+        ? orders.map(o => `<tr><td>#${esc(o.id)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_email)}</td><td>${esc(o.socket)}</td><td class="num">${esc(o.kwh)}</td><td>${esc(o.payment_method)}</td><td class="num">${peso(o.total)}</td><td>${esc(new Date(o.createdAt).toLocaleString())}</td></tr>`).join('')
+        : '<tr><td colspan="8" class="m">No bookings yet.</td></tr>';
+      $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      $('rows').innerHTML = '<tr><td colspan="8" class="m">Could not load data. Is the server running?</td></tr>';
+    }
+  }
+
+  $('refresh').addEventListener('click', load);
+  load();
+  setInterval(load, 10000);
+</script>
+</body>
+</html>
