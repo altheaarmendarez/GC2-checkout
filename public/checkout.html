@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Checkout</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 16px; }
+    form { display: flex; flex-direction: column; gap: 12px; }
+    input, button { padding: 10px; font-size: 16px; }
+    #message { padding: 10px; margin-top: 10px; display: none; }
+    .error { background: #ffe6e6; color: red; }
+    .success { background: #e6ffe6; color: green; }
+  </style>
+</head>
+<body>
+  <h1>Checkout</h1>
+  <form id="checkout-form">
+    <label>Name: <input type="text" id="name" required></label>
+    <label>Email: <input type="email" id="email" required></label>
+    <button type="submit">Place Order</button>
+  </form>
+  <div id="message"></div>
+
+  <script>
+    document.getElementById('checkout-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msgDiv = document.getElementById('message');
+      msgDiv.style.display = 'block';
+      msgDiv.className = '';
+      msgDiv.innerText = 'Processing order...';
+
+      const payload = {
+        customer_name: document.getElementById('name').value,
+        customer_email: document.getElementById('email').value,
+        items: [{ product_id: 1, quantity: 1 }]
+      };
+
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Order failed');
+
+        msgDiv.className = 'success';
+        msgDiv.innerText = 'Order saved! Redirecting...';
+        setTimeout(() => {
+          window.location.href = 'confirmation.html?id=' + data.id;
+        }, 1000);
+      } catch (err) {
+        msgDiv.className = 'error';
+        msgDiv.innerText = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Order Confirmation</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 16px; }
+    .card { border: 1px solid #ccc; padding: 16px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Order Confirmation</h1>
+  <div id="details">Loading order details...</div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('id');
+
+    if (!orderId) {
+      document.getElementById('details').innerText = 'No order ID provided.';
+    } else {
+      fetch('/api/orders/' + orderId)
+        .then(res => {
+          if (!res.ok) throw new Error('Order not found');
+          return res.json();
+        })
+        .then(order => {
+          document.getElementById('details').innerHTML = `
+            <div class="card">
+              <h3>Order #${order.id}</h3>
+              <p><strong>Customer:</strong> ${order.customer_name} (${order.customer_email})</p>
+              <p><strong>Total Paid:</strong> ₱${order.total}</p>
+              <p><strong>Date:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
+            </div>
+          `;
+        })
+        .catch(err => {
+          document.getElementById('details').innerText = err.message;
+        });
+    }
+  </script>
+</body>
+</html>
