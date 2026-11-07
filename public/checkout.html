@@ -1,59 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Checkout</title>
-  <style>
-    body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 16px; }
-    form { display: flex; flex-direction: column; gap: 12px; }
-    input, button { padding: 10px; font-size: 16px; }
-    #message { padding: 10px; margin-top: 10px; display: none; }
-    .error { background: #ffe6e6; color: red; }
-    .success { background: #e6ffe6; color: green; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Checkout · WattSpot</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .main{height:auto;flex-wrap:wrap;padding-bottom:48px}
+  .main>.col{flex:1 1 380px}
+  .bill{flex:0 1 520px;min-width:300px;gap:18px}
+  .bill .h2{color:#fff}
+  .ov{position:fixed;display:none}
+  .modal{position:fixed;width:min(600px,92vw);display:none}
+  .ov.open,.modal.open{display:flex}
+  .ov.open{display:block}
+  input.in,select.in{width:100%;font:inherit;color:var(--ink);outline:none}
+  input.in:focus,select.in:focus,.opt:focus-visible,.btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+  .opt{cursor:pointer;width:100%;font:inherit;text-align:left}
+  .opt.sel{border:2px solid var(--bl);background:#fff}
+  button.btn{border:0;cursor:pointer;font-family:inherit}
+  button.btn:disabled{opacity:.6;cursor:wait}
+  #message{display:none;padding:12px 16px;border-radius:14px;background:#ffe6e6;color:#a30000;font-size:14px}
+</style>
 </head>
 <body>
-  <h1>Checkout</h1>
-  <form id="checkout-form">
-    <label>Name: <input type="text" id="name" required></label>
-    <label>Email: <input type="email" id="email" required></label>
-    <button type="submit">Place Order</button>
+<div class="nav">
+  <div class="logo">WattSpot</div>
+  <a>Map</a><a class="on">Stations</a><a>Sessions</a><a>Wallet</a><a>Premium</a>
+</div>
+
+<div class="main">
+  <form id="f" class="col" novalidate>
+    <div class="row sb"><div class="h2">Checkout</div><span class="pill">Slot held</span></div>
+    <div class="g col" style="gap:6px">
+      <label class="lbl" for="socket" style="margin-top:0">Station and socket</label>
+      <select class="in" id="socket"><option>Loading stations…</option></select>
+      <label class="lbl" for="kwh">Energy to charge (kWh)</label>
+      <input class="in" id="kwh" type="number" min="1" step="0.1" value="46.4" required>
+      <label class="lbl" for="name">Full name</label>
+      <input class="in" id="name" type="text" autocomplete="name" required>
+      <label class="lbl" for="email">Email</label>
+      <input class="in" id="email" type="email" autocomplete="email" required>
+    </div>
+    <div id="message" role="alert"></div>
   </form>
-  <div id="message"></div>
 
-  <script>
-    document.getElementById('checkout-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const msgDiv = document.getElementById('message');
-      msgDiv.style.display = 'block';
-      msgDiv.className = '';
-      msgDiv.innerText = 'Processing order...';
+  <div class="dk col bill">
+    <div class="h3">Itemized bill</div>
+    <div class="m" id="sum-name"></div>
+    <div class="row sb"><span class="m" id="l-charge">Charging fee</span><b id="a-charge">₱0.00</b></div>
+    <div class="row sb"><span class="m">Slot reservation fee</span><b id="a-res">₱50.00</b></div>
+    <div class="row sb"><span class="m">Refundable overstay deposit</span><b id="a-dep">₱100.00</b></div>
+    <hr style="border-color:#2b2e44">
+    <div class="row sb"><span class="m">Total due today</span><span class="h2" id="total">₱0.00</span></div>
+    <button type="button" class="btn w" id="go" style="margin-top:auto">Continue to payment</button>
+  </div>
+</div>
 
-      const payload = {
-        customer_name: document.getElementById('name').value,
-        customer_email: document.getElementById('email').value,
-        items: [{ product_id: 1, quantity: 1 }]
-      };
+<div class="ov" id="ov"></div>
+<div class="g modal col" id="modal" role="dialog" aria-modal="true" aria-labelledby="pay-title" style="gap:14px">
+  <div class="h3" id="pay-title">Choose payment</div>
+  <button type="button" class="opt" data-m="GCash">GCash</button>
+  <button type="button" class="opt" data-m="Maya Wallet">Maya Wallet</button>
+  <button type="button" class="opt sel" data-m="Card">Credit / Debit card</button>
+  <button type="button" class="opt" data-m="Watt Credits">Watt Credits</button>
+  <hr>
+  <div class="row sb"><span class="m">Amount due today</span><span class="h2" id="total2">₱0.00</span></div>
+  <div id="pay-error" role="alert" class="m" style="color:#a30000;display:none"></div>
+  <button type="button" class="btn w" id="pay">Pay securely</button>
+  <button type="button" class="btn o w" id="cancel">Back to bill</button>
+</div>
 
-      try {
-        const res = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Order failed');
+<script>
+  const RES = 50, DEP = 100;      // display only; the server calculates the real total
+  let products = [], method = 'Card';
+  const $ = id => document.getElementById(id);
+  const peso = n => '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        msgDiv.className = 'success';
-        msgDiv.innerText = 'Order saved! Redirecting...';
-        setTimeout(() => {
-          window.location.href = 'confirmation.html?id=' + data.id;
-        }, 1000);
-      } catch (err) {
-        msgDiv.className = 'error';
-        msgDiv.innerText = err.message;
-      }
-    });
-  </script>
+  async function load() {
+    try {
+      products = await (await fetch('/api/products')).json();
+    } catch (e) {
+      return showError('Could not load stations. Refresh the page to try again.');
+    }
+    $('socket').innerHTML = products.map(p =>
+      `<option value="${p.id}" ${p.stock < 1 ? 'disabled' : ''}>${p.name} · ₱${p.price_per_kwh}/kWh · ${p.stock < 1 ? 'full' : p.stock + ' free'}</option>`
+    ).join('');
+    const first = products.find(p => p.stock > 0);
+    if (first) $('socket').value = first.id;
+    bill();
+  }
+
+  function bill() {
+    const p = products.find(x => x.id == $('socket').value);
+    const kwh = parseFloat($('kwh').value) || 0;
+    const charge = p ? Math.round(p.price_per_kwh * kwh * 100) / 100 : 0;
+    $('sum-name').textContent = p ? p.name : '';
+    $('l-charge').textContent = `Charging fee (${kwh} kWh × ₱${p ? p.price_per_kwh : 0})`;
+    $('a-charge').textContent = peso(charge);
+    $('a-res').textContent = peso(RES);
+    $('a-dep').textContent = peso(DEP);
+    $('total').textContent = $('total2').textContent = peso(charge + RES + DEP);
+  }
+
+  function showError(t) { const m = $('message'); m.style.display = 'block'; m.textContent = t; }
+  function openModal(open) { $('ov').classList.toggle('open', open); $('modal').classList.toggle('open', open); }
+
+  $('socket').addEventListener('change', bill);
+  $('kwh').addEventListener('input', bill);
+  $('go').addEventListener('click', () => {
+    $('message').style.display = 'none';
+    if (!$('f').reportValidity()) return;
+    if (!products.some(p => p.id == $('socket').value && p.stock > 0)) return showError('Pick a station with a free socket.');
+    openModal(true);
+  });
+  $('cancel').addEventListener('click', () => openModal(false));
+  $('ov').addEventListener('click', () => openModal(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') openModal(false); });
+
+  document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.opt').forEach(o => o.classList.remove('sel'));
+    b.classList.add('sel');
+    method = b.dataset.m;
+  }));
+
+  $('pay').addEventListener('click', async () => {
+    const btn = $('pay'), err = $('pay-error');
+    err.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Processing…';
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: $('name').value.trim(),
+          customer_email: $('email').value.trim(),
+          payment_method: method,
+          product_id: Number($('socket').value),
+          kwh: parseFloat($('kwh').value)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Order failed');
+      window.location.href = 'confirmation.html?id=' + data.id;
+    } catch (e) {
+      err.textContent = e.message; err.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Pay securely';
+    }
+  });
+
+  load();
+</script>
 </body>
 </html>

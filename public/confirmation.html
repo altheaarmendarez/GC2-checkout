@@ -1,43 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Order Confirmation</title>
-  <style>
-    body { font-family: sans-serif; max-width: 400px; margin: 40px auto; padding: 0 16px; }
-    .card { border: 1px solid #ccc; padding: 16px; border-radius: 8px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reservation confirmed · WattSpot</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .main{height:auto;justify-content:center;padding-bottom:48px}
+  .receipt{width:min(520px,100%);gap:14px}
+  .receipt .ic{align-self:flex-start;font-size:22px;font-weight:700}
+  .receipt hr{margin:4px 0}
+  .btn{border:0;cursor:pointer;font-family:inherit;text-decoration:none}
+  .btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+  @media print{.nav,.actions{display:none}body{background:#fff}}
+</style>
 </head>
 <body>
-  <h1>Order Confirmation</h1>
-  <div id="details">Loading order details...</div>
+<div class="nav">
+  <div class="logo">WattSpot</div>
+  <a>Map</a><a class="on">Stations</a><a>Sessions</a><a>Wallet</a><a>Premium</a>
+</div>
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const orderId = params.get('id');
+<div class="main">
+  <div class="g col receipt" id="details" aria-live="polite">
+    <div class="m">Loading your reservation…</div>
+  </div>
+</div>
 
-    if (!orderId) {
-      document.getElementById('details').innerText = 'No order ID provided.';
-    } else {
-      fetch('/api/orders/' + orderId)
-        .then(res => {
-          if (!res.ok) throw new Error('Order not found');
-          return res.json();
-        })
-        .then(order => {
-          document.getElementById('details').innerHTML = `
-            <div class="card">
-              <h3>Order #${order.id}</h3>
-              <p><strong>Customer:</strong> ${order.customer_name} (${order.customer_email})</p>
-              <p><strong>Total Paid:</strong> ₱${order.total}</p>
-              <p><strong>Date:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
-            </div>
-          `;
-        })
-        .catch(err => {
-          document.getElementById('details').innerText = err.message;
-        });
-    }
-  </script>
+<script>
+  const peso = n => '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const row = (label, value) => `<div class="row sb"><span class="m">${label}</span><b>${value}</b></div>`;
+  const box = document.getElementById('details');
+  const orderId = new URLSearchParams(window.location.search).get('id');
+
+  if (!orderId) {
+    box.innerHTML = '<div class="h3">No order found</div><div class="m">Open this page from the checkout, or add ?id= and your order number to the link.</div><a class="btn w" href="checkout.html">Back to checkout</a>';
+  } else {
+    fetch('/api/orders/' + encodeURIComponent(orderId))
+      .then(res => {
+        if (!res.ok) throw new Error('Order not found. The server may have restarted, so place the order again.');
+        return res.json();
+      })
+      .then(o => {
+        const b = o.breakdown || {};
+        box.innerHTML = `
+          <span class="ic">✓</span>
+          <div class="h2">Reservation confirmed</div>
+          <div class="m">Order #${esc(o.id)} · ${esc(new Date(o.createdAt).toLocaleString())}</div>
+          <hr>
+          ${row('Customer', esc(o.customer_name))}
+          ${row('Email', esc(o.customer_email))}
+          ${row('Socket', esc(o.socket || ''))}
+          ${row('Energy booked', esc(o.kwh) + ' kWh')}
+          <hr>
+          ${row('Charging fee', peso(b.charging ?? 0))}
+          ${row('Slot reservation fee', peso(b.reservation_fee ?? 0))}
+          ${row('Refundable overstay deposit', peso(b.deposit ?? 0))}
+          ${row('Paid with', esc(o.payment_method || ''))}
+          <div class="dk row sb" style="padding:20px 26px">
+            <span class="m">Total paid</span><span class="h2" style="color:#fff">${peso(o.total)}</span>
+          </div>
+          <div class="actions col" style="gap:12px">
+            <button type="button" class="btn w" onclick="window.print()">Download receipt</button>
+            <a class="btn o w" href="checkout.html">Book another socket</a>
+          </div>`;
+      })
+      .catch(err => {
+        box.innerHTML = `<div class="h3">Something went wrong</div><div class="m">${esc(err.message)}</div><a class="btn w" href="checkout.html">Back to checkout</a>`;
+      });
+  }
+</script>
 </body>
 </html>

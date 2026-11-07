@@ -9,9 +9,9 @@ const PORT = process.env.PORT || 3000;
 
 // Mock Database (Products with names, prices, stock)
 let products = [
-  { id: 1, name: "Sample Item 1", price: 150, stock: 10 },
-  { id: 2, name: "Sample Item 2", price: 300, stock: 3 },
-  { id: 3, name: "Sample Item 3", price: 600, stock: 0 }
+  { id: 1, name: "UP Town Center", price_per_kwh: 26.00, stock: 4 },
+  { id: 2, name: "SM North EDSA", price_per_kwh: 26.50, stock: 2 },
+  { id: 3, name: "Ayala Malls Manila Bay", price_per_kwh: 27.00, stock: 0 }
 ];
 
 let orders = [];
